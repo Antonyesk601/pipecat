@@ -643,7 +643,7 @@ async def test_http_word_timestamps_report_audio_tags_as_words():
     async for _ in service.run_tts("It's [excited] back [short pause] up.", "ctx-1"):
         pass
 
-    assert reported[:4] == ["It's", "[excited]", "back", "[shortpause]"]
+    assert reported[:4] == ["It's", "[excited]", "back", "[short pause]"]
 
 
 @pytest.mark.asyncio

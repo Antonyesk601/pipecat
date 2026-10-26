@@ -42,6 +42,7 @@ from pipecat.services.elevenlabs.tts_base import (
     ELEVENLABS_MODEL_LANGUAGES,
     ElevenLabsTTSBase,
     ElevenLabsTTSSettingsBase,
+    _audio_tag_words,
     _join_audio_tags,
     _select_alignment,
     _strip_utterance_leading_spaces,
@@ -1185,17 +1186,12 @@ class ElevenLabsHttpTTSService(TTSService):
                                 # when its sounds are performed.
                                 joined, in_audio_tag = _join_audio_tags(
                                     alignment,
-                                    (
-                                        "characters",
-                                        "character_start_times_seconds",
-                                        "character_end_times_seconds",
-                                    ),
+                                    "characters",
                                     in_audio_tag,
                                 )
-                            # A chunk can be only the spaces inside a tag, leaving nothing.
-                            word_times = (
-                                self.calculate_word_times(joined) if joined["characters"] else []
-                            )
+                            word_times = self.calculate_word_times(joined)
+                            if self._expression_formatter:
+                                word_times = _audio_tag_words(word_times)
                             if word_times:
                                 await self.add_word_timestamps(
                                     word_times,

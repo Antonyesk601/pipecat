@@ -405,45 +405,52 @@ def _select_alignment(
     return msg.get(alignment_key) or msg.get(normalized_key)
 
 
+# A space inside an audio tag while the alignment is split into words, so the
+# tag stays one word; :func:`_audio_tag_words` puts the space back.
+_TAG_SPACE = "\u00a0"
+
+
 def _join_audio_tags(
-    alignment: Mapping[str, Any], keys: tuple[str, str, str], in_tag: bool
+    alignment: Mapping[str, Any], chars_key: str, in_tag: bool
 ) -> tuple[dict[str, Any], bool]:
     """Join each bracketed audio tag, such as ``[short pause]``, into one word of the alignment.
 
     Eleven v3 and v4 return the tags they perform as characters in the
-    alignment. Without the spaces inside it, a tag reaches the word timestamps
-    as a word of its own, which completes the sound or pause it performs. A
-    tag can span alignment chunks, so whether one is still open is carried
-    from chunk to chunk.
+    alignment. With the spaces inside it held as ``_TAG_SPACE``, a tag reaches
+    the word timestamps as a word of its own, which completes the sound or
+    pause it performs. A tag can span alignment chunks, so whether one is still
+    open is carried from chunk to chunk.
 
     Args:
         alignment: Alignment dict from the API.
-        keys: Tuple of (chars_key, start_times_key, durations_or_end_times_key)
-            naming the three parallel arrays.
+        chars_key: The key of its characters.
         in_tag: Whether a tag was still open at the end of the previous chunk.
 
     Returns:
-        The alignment without the spaces inside tags, and whether a tag is
+        The alignment with the spaces inside tags held, and whether a tag is
         still open at its end.
     """
-    chars_key, starts_key, tail_key = keys
-    chars = alignment.get(chars_key) or []
-    starts = alignment.get(starts_key) or []
-    tails = alignment.get(tail_key) or []
-    kept = []
-    for i, char in enumerate(chars):
+    joined_chars = []
+    for char in alignment.get(chars_key) or []:
         if char == "[":
             in_tag = True
         elif char == "]":
             in_tag = False
         elif char == " " and in_tag:
-            continue
-        kept.append(i)
+            char = _TAG_SPACE
+        joined_chars.append(char)
     joined = dict(alignment)
-    joined[chars_key] = [chars[i] for i in kept]
-    joined[starts_key] = [starts[i] for i in kept]
-    joined[tail_key] = [tails[i] for i in kept] if tails else []
+    joined[chars_key] = joined_chars
     return joined, in_tag
+
+
+def _audio_tag_words(word_times: list[tuple[str, float]]) -> list[tuple[str, float]]:
+    """Put back the spaces :func:`_join_audio_tags` held inside audio tags.
+
+    A tag is reported as it was sent, ``[inhales deeply]``, so it matches the
+    text the service was given.
+    """
+    return [(word.replace(_TAG_SPACE, " "), time) for word, time in word_times]
 
 
 def _strip_utterance_leading_spaces(

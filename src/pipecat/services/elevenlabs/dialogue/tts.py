@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
 from pipecat.services.elevenlabs.tts_base import (
     ElevenLabsTTSBase,
     ElevenLabsTTSSettingsBase,
+    _audio_tag_words,
     _join_audio_tags,
     _select_alignment,
     _strip_utterance_leading_spaces,
@@ -394,7 +395,7 @@ class ElevenLabsDialogueTTSService(ElevenLabsTTSBase):
                 # are performed.
                 joined, context.in_audio_tag = _join_audio_tags(
                     alignment,
-                    ("chars", "charStartTimesMs", "charDurationsMs"),
+                    "chars",
                     context.in_audio_tag,
                 )
             word_times, self._partial_word, self._partial_word_start_time = calculate_word_times(
@@ -403,6 +404,8 @@ class ElevenLabsDialogueTTSService(ElevenLabsTTSBase):
                 self._partial_word,
                 self._partial_word_start_time,
             )
+            if self._expression_formatter:
+                word_times = _audio_tag_words(word_times)
 
             if word_times:
                 await self.add_word_timestamps(
