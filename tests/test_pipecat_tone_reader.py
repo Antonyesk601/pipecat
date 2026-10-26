@@ -16,7 +16,7 @@ from pipecat.frames.frames import (
     PerceptionMetadataFrame,
     TranscriptionFrame,
 )
-from pipecat.processors.perception.tone import PipecatToneReader
+from pipecat.processors.tone.reader import PipecatToneReader
 from pipecat.tests.utils import run_test
 
 TAGS = {
