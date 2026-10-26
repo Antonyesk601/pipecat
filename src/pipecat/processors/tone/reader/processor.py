@@ -38,7 +38,8 @@ class PipecatToneReader(FrameProcessor):
     set as its ``perception``: the turn's ``emotion``, its two likeliest labels
     with their confidences, and its ``sarcasm``, the chance it's sarcastic.
     The read runs off the event loop, and the transcription waits for it, a
-    few milliseconds.
+    few milliseconds. A model that can't be loaded is reported as an error
+    that leaves the reader unusable, and transcriptions pass through unread.
 
     Part of expressive conversation (alpha): turn it on with
     ``PipelineParams(enable_expressive_conversation=True)`` for the LLM to read
@@ -82,23 +83,36 @@ class PipecatToneReader(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, StartFrame):
-            await self._start()
+            # The pipeline starts whether or not the model loads.
             await self.push_frame(frame, direction)
-            await self.push_frame(
-                PerceptionMetadataFrame(service_name=self.name, perception=self._capabilities())
-            )
+            if await self._start():
+                await self.push_frame(
+                    PerceptionMetadataFrame(service_name=self.name, perception=self._capabilities())
+                )
             return
-        if isinstance(frame, TranscriptionFrame) and frame.text.strip():
+        if isinstance(frame, TranscriptionFrame) and frame.text.strip() and self._model:
             frame.perception = await self._read(frame.text)
         elif isinstance(frame, LLMContextAssistantTurnFrame):
             self._previous = frame.text
         await self.push_frame(frame, direction)
 
-    async def _start(self):
+    async def _start(self) -> bool:
+        """Load the model, or report the reader unusable when it can't be loaded."""
         if self._model is None:
-            self._model = await asyncio.to_thread(
-                PipecatToneReaderModel.download, precision=self._precision, threads=self._threads
-            )
+            try:
+                self._model = await asyncio.to_thread(
+                    PipecatToneReaderModel.download,
+                    precision=self._precision,
+                    threads=self._threads,
+                )
+            except Exception as e:
+                await self.push_error(
+                    f"Pipecat Tone's reader couldn't load its model: {e}",
+                    e,
+                    force_treat_as_permanent=True,
+                )
+                return False
+        return True
 
     def _capabilities(self) -> PerceptionCapabilities:
         assert self._model

@@ -16,7 +16,7 @@ from pipecat.frames.frames import (
     PerceptionMetadataFrame,
     TranscriptionFrame,
 )
-from pipecat.processors.tone.reader import PipecatToneReader
+from pipecat.processors.tone.reader import PipecatToneReader, PipecatToneReaderModel
 from pipecat.tests.utils import run_test
 
 TAGS = {
@@ -114,3 +114,21 @@ async def test_a_failed_read_is_reported_and_the_transcription_still_passes():
 
     assert [f for f in up if isinstance(f, ErrorFrame)]
     assert down[1].perception is None
+
+
+@pytest.mark.asyncio
+async def test_a_model_that_cant_load_leaves_the_reader_unusable_and_the_pipeline_running(
+    monkeypatch,
+):
+    def fail(**kwargs):
+        raise OSError("no network")
+
+    monkeypatch.setattr(PipecatToneReaderModel, "download", fail)
+    reader = PipecatToneReader()
+
+    down, up = await run_test(reader, frames_to_send=[_transcription("Hello there.")])
+
+    assert not reader.is_usable
+    assert [f for f in up if isinstance(f, ErrorFrame)]
+    assert not [f for f in down if isinstance(f, PerceptionMetadataFrame)]
+    assert [f.perception for f in down if isinstance(f, TranscriptionFrame)] == [None]
