@@ -197,7 +197,7 @@ async def test_a_breath_is_offered_only_with_the_breathe_preset(monkeypatch):
 
     without, with_breathe = (turn.space.sounds for turn, _, _ in model.calls)
     assert "breath" not in without
-    assert with_breathe["breath"] == "inhales deeply"
+    assert with_breathe["breath"] == "short breath"
 
 
 @pytest.mark.asyncio
@@ -247,7 +247,7 @@ async def test_breaths_past_the_models_limit_for_a_reply_are_dropped(monkeypatch
         monkeypatch, model, ELEVENLABS, *_reply("One. Two."), params=_expressive(policy)
     )
 
-    assert tagged == ["[[inhales deeply]] One.", "Two."]
+    assert tagged == ["[[short breath]] One.", "Two."]
 
 
 @pytest.mark.asyncio

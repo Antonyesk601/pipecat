@@ -19,10 +19,11 @@ from pipecat.expressive.expression import (
 # The audio tag each speed delivery is written as.
 _SPEED_TAGS = {SLOW_DELIVERY: "slowly", FAST_DELIVERY: "quickly"}
 
-# The audio tags in ElevenLabs' prompting guide for Eleven v3 and v4, sorted
-# into sounds made at one point and deliveries that last. Their guide doesn't
-# draw that line. Multi-word deliveries, such as accents, aren't listed; written
-# in a tag, they're passed on as free text.
+# The audio tags in ElevenLabs' prompting guide for Eleven v3 and v4, and a
+# short breath, gentler than the guide's deep one, sorted into sounds made at
+# one point and deliveries that last. Their guide doesn't draw that line.
+# Multi-word deliveries, such as accents, aren't listed; written in a tag,
+# they're passed on as free text.
 _AUDIO_TAG_SOUNDS = [
     ExpressionTerm("laughs"),
     ExpressionTerm("laughs harder"),
@@ -38,6 +39,7 @@ _AUDIO_TAG_SOUNDS = [
     ExpressionTerm("exhales"),
     ExpressionTerm("exhales sharply"),
     ExpressionTerm("inhales deeply"),
+    ExpressionTerm("short breath"),
     ExpressionTerm("clears throat"),
     ExpressionTerm("gulps"),
     ExpressionTerm("swallows"),
@@ -125,7 +127,7 @@ class ElevenLabsAudioTagExpressionAdapter(BaseExpressionAdapter):
                 "laugh": ["laughs"],
                 "chuckle": ["chuckles"],
                 "sigh": ["sighs"],
-                "breath": ["inhales deeply"],
+                "breath": ["short breath", "inhales deeply"],
             },
         )
 

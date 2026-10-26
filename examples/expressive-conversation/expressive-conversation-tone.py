@@ -119,7 +119,7 @@ async def run_bot(transport: BaseTransport, runner_args: RunnerArguments):
             "giggles",
             "sighs",
             "exhales",
-            "inhales deeply",
+            "short breath",
             "clears throat",
             "gulps",
         ],
