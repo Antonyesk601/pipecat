@@ -53,7 +53,6 @@ class PipecatToneReader(FrameProcessor):
     def __init__(
         self,
         *,
-        model: PipecatToneReaderModel | None = None,
         precision: Literal["fp16", "fp32"] = "fp16",
         threads: int = 4,
         **kwargs,
@@ -61,14 +60,12 @@ class PipecatToneReader(FrameProcessor):
         """Initialize the processor.
 
         Args:
-            model: The model to read with, or None to download Pipecat Tone
-                from Hugging Face at start.
             precision: The weights to download: ``"fp16"`` or ``"fp32"``.
             threads: The CPU threads for one read.
             **kwargs: Additional arguments passed to the parent.
         """
         super().__init__(**kwargs)
-        self._model = model
+        self._model: PipecatToneReaderModel | None = None
         self._precision: Literal["fp16", "fp32"] = precision
         self._threads = threads
         self._previous: str | None = None

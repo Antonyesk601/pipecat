@@ -16,7 +16,6 @@ here follows the model's reference runtime (Apache-2.0).
 **Alpha.** These types are likely to change between releases.
 """
 
-from pipecat.processors.tone.reader.model import TONE_REPO, TONE_REVISION, PipecatToneReaderModel
 from pipecat.processors.tone.reader.processor import PipecatToneReader
 
-__all__ = ["TONE_REPO", "TONE_REVISION", "PipecatToneReader", "PipecatToneReaderModel"]
+__all__ = ["PipecatToneReader"]
