@@ -50,6 +50,19 @@ class MiniMaxExpressionAdapter(BaseExpressionAdapter):
             + SPEED_DELIVERY,
             pause_range_ms=(10, 99990),
             delivery_scope=DeliveryScope.SENTENCE,
+            standard_names={
+                "calm": ["calm"],
+                "warm": ["happy"],
+                "excited": ["happy"],
+                "surprised": ["surprised"],
+                "sad": ["sad"],
+                "slow": ["slow"],
+                "fast": ["fast"],
+                "laugh": ["laughs"],
+                "chuckle": ["chuckle"],
+                "sigh": ["sighs"],
+                "breath": ["breath", "inhale"],
+            },
         )
 
     def request_settings(self, delivery: list[str]) -> dict[str, Any]:

@@ -41,6 +41,26 @@ EMPHASIS_DELIVERY = "emphasis"
 SLOW_DELIVERY = "slow"
 FAST_DELIVERY = "fast"
 
+# Standard labels for the deliveries and sounds most services perform, for a
+# processor that writes tags from a fixed set, such as a tagger, rather than
+# from what a service declares. A service lists the names it performs each by in
+# its capabilities' ``standard_names``.
+STANDARD_DELIVERY = (
+    "calm",
+    "sympathetic",
+    "apologetic",
+    "warm",
+    "excited",
+    "surprised",
+    "sad",
+    "grateful",
+    "curious",
+    "confident",
+    SLOW_DELIVERY,
+    FAST_DELIVERY,
+)
+STANDARD_SOUNDS = ("laugh", "chuckle", "sigh", "breath")
+
 
 class DeliveryScope(Enum):
     """Where in a response a TTS service can change delivery.
@@ -109,6 +129,12 @@ class ExpressionCapabilities:
             in milliseconds, or None when it can't pause.
         emphasis: Whether the service can stress words marked ``^^word^^``.
         delivery_scope: Where in a response the service can change delivery.
+        standard_names: The names the service performs each standard delivery
+            and sound by (``STANDARD_DELIVERY``, ``STANDARD_SOUNDS``), best
+            first, such as ``{"calm": ["calm", "peaceful"], "laugh":
+            ["laughter"]}``. A later name stands in when an expression policy
+            leaves out the ones before it. A label left out is performed by its
+            own name, when the service declares it or accepts free text.
     """
 
     sounds: list[ExpressionTerm] = field(default_factory=list)
@@ -118,6 +144,7 @@ class ExpressionCapabilities:
     pause_range_ms: tuple[int, int] | None = None
     emphasis: bool = False
     delivery_scope: DeliveryScope = DeliveryScope.ANYWHERE
+    standard_names: dict[str, list[str]] = field(default_factory=dict)
 
 
 # Slow and fast, as a service that performs them declares them.
@@ -127,3 +154,32 @@ SPEED_DELIVERY = [
     ),
     ExpressionTerm(FAST_DELIVERY, "to say something in passing"),
 ]
+
+
+def standard_name(
+    capabilities: ExpressionCapabilities, label: str, offered: list[str] | None = None
+) -> str | None:
+    """Return the name a service performs a standard delivery or sound by.
+
+    The service's names for the label are tried best first, then, for a
+    service that accepts free text, the label itself.
+
+    Args:
+        capabilities: What the service can perform.
+        label: A label from ``STANDARD_DELIVERY`` or ``STANDARD_SOUNDS``.
+        offered: The names an expression policy offers, or None for any.
+
+    Returns:
+        The first name the service performs and the policy offers, or None
+        when there's none.
+    """
+    if label in STANDARD_SOUNDS:
+        terms, free_text = capabilities.sounds, capabilities.free_text_sounds
+    else:
+        terms, free_text = capabilities.delivery, capabilities.free_text_delivery
+    declared = {term.name for term in terms}
+    names = capabilities.standard_names.get(label, [label])
+    for name in [*names, label] if free_text else names:
+        if (free_text or name in declared) and (offered is None or name in offered):
+            return name
+    return None

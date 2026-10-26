@@ -80,6 +80,24 @@ class FishAudioS2ExpressionAdapter(BaseExpressionAdapter):
             free_text_delivery=True,
             pause_range_ms=(100, 1500),
             emphasis=True,
+            standard_names={
+                "calm": ["calm", "relaxed"],
+                "sympathetic": ["sympathetic", "empathetic", "compassionate"],
+                "apologetic": ["regretful"],
+                "warm": ["happy", "relaxed"],
+                "excited": ["excited", "delighted"],
+                "surprised": ["surprised"],
+                "sad": ["sad"],
+                "grateful": ["grateful"],
+                "curious": ["curious"],
+                "confident": ["confident"],
+                "slow": ["slow"],
+                "fast": ["fast"],
+                "laugh": ["laughing"],
+                "chuckle": ["chuckling"],
+                "sigh": ["sighing"],
+                "breath": ["inhaling"],
+            },
         )
 
     def format_text(

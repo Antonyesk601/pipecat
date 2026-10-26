@@ -109,6 +109,24 @@ class ElevenLabsAudioTagExpressionAdapter(BaseExpressionAdapter):
             free_text_delivery=True,
             pause_range_ms=(100, 3000),
             emphasis=True,
+            standard_names={
+                "calm": ["calm", "reassuring"],
+                "sympathetic": ["sympathetic"],
+                "apologetic": ["apologetic", "sheepishly"],
+                "warm": ["warmly"],
+                "excited": ["excited", "delighted"],
+                "surprised": ["surprised"],
+                "sad": ["sad"],
+                "grateful": ["grateful", "warmly"],
+                "curious": ["curious"],
+                "confident": ["confident", "professional"],
+                "slow": ["slow"],
+                "fast": ["fast"],
+                "laugh": ["laughs"],
+                "chuckle": ["chuckles"],
+                "sigh": ["sighs"],
+                "breath": ["inhales deeply"],
+            },
         )
 
     def format_text(

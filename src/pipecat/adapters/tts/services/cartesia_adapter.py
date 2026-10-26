@@ -116,6 +116,22 @@ class CartesiaExpressionAdapter(BaseExpressionAdapter):
             ],
             pause_range_ms=(100, 5000),
             delivery_scope=DeliveryScope.SENTENCE,
+            standard_names={
+                "calm": ["calm", "peaceful", "serene"],
+                "sympathetic": ["sympathetic"],
+                "apologetic": ["apologetic"],
+                "warm": ["content", "happy"],
+                "excited": ["excited", "enthusiastic"],
+                "surprised": ["surprised"],
+                "sad": ["sad", "disappointed"],
+                "grateful": ["grateful"],
+                "curious": ["curious"],
+                "confident": ["confident"],
+                "slow": ["slow"],
+                "fast": ["fast"],
+                "laugh": ["laughter"],
+                "chuckle": ["laughter"],
+            },
         )
 
     def format_text(
