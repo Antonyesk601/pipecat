@@ -61,7 +61,7 @@ class PipecatToneTaggerModel:
 
     @property
     def breaths_per_reply(self) -> int | None:
-        """The most breaths before a sentence a reply takes, or None for no limit."""
+        """The most breaths a reply takes, or None for no limit."""
         return self.config.get("breaths_per_reply")
 
     @classmethod

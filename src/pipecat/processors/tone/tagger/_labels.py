@@ -53,7 +53,13 @@ class LabelSpace:
 
 @dataclass(frozen=True)
 class Span:
-    """A delivery for some words, ``<<delivery: words>>``, by offsets in the sentence."""
+    """A delivery for some words, ``<<delivery: words>>``, by offsets in the sentence.
+
+    Parameters:
+        start: The offset of the first word's first character.
+        end: The offset just past the last word.
+        delivery: The words' delivery, a standard label.
+    """
 
     start: int
     end: int

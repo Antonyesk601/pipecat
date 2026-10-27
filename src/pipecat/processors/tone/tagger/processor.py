@@ -23,6 +23,7 @@ from pipecat.frames.frames import (
     StartFrame,
     TextType,
     TTSMetadataFrame,
+    UserTurnResponseCancelFrame,
 )
 from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
@@ -121,6 +122,9 @@ class PipecatToneTagger(LLMTextProcessor):
             self._messages.append(Message("user", frame.text))
         elif isinstance(frame, LLMContextAssistantTurnFrame):
             self._messages.append(Message("assistant", frame.text))
+        elif isinstance(frame, UserTurnResponseCancelFrame):
+            # The turn an early reply was to answer isn't over yet.
+            self._messages = [m for m in self._messages if not m.speculation]
         elif isinstance(frame, InterruptionFrame):
             self._turn = None
 
@@ -195,7 +199,7 @@ class PipecatToneTagger(LLMTextProcessor):
         ):
             return sentence
         plain = strip_expression_tags(sentence)
-        if plain != sentence.strip() and not self._warned_of_tags:
+        if plain != " ".join(sentence.split()) and not self._warned_of_tags:
             logger.warning(f"{self}: the LLM wrote tags; tagging its words without them")
             self._warned_of_tags = True
         if not plain:
@@ -216,8 +220,17 @@ class PipecatToneTagger(LLMTextProcessor):
     def _capped_breaths(self, labels: SentenceLabels) -> SentenceLabels:
         """The labels without a breath past the model's limit for a reply."""
         cap = self._model.breaths_per_reply if self._model else None
-        if labels.sound_before != "breath" or cap is None:
+        if cap is None:
             return labels
-        if sum(sentence.sound_before == "breath" for sentence in self._labels or []) < cap:
-            return labels
-        return replace(labels, sound_before=None)
+        taken = sum(_breaths(sentence) for sentence in self._labels or [])
+        if labels.sound_before == "breath":
+            if taken >= cap:
+                labels = replace(labels, sound_before=None)
+            taken += 1
+        if labels.sound_after == "breath" and taken >= cap:
+            labels = replace(labels, sound_after=None)
+        return labels
+
+
+def _breaths(labels: SentenceLabels) -> int:
+    return (labels.sound_before == "breath") + (labels.sound_after == "breath")

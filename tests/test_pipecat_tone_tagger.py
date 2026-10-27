@@ -25,14 +25,15 @@ from pipecat.frames.frames import (
     LLMFullResponseStartFrame,
     LLMTextFrame,
     TTSMetadataFrame,
+    UserTurnResponseCancelFrame,
 )
 from pipecat.pipeline.worker import PipelineParams
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.processors.frameworks.rtvi.frames import RTVISendTextFrame
 from pipecat.processors.tone import _models
 from pipecat.processors.tone.tagger import PipecatToneTagger
-from pipecat.processors.tone.tagger._input import TurnContext
-from pipecat.processors.tone.tagger._labels import SentenceLabels, Span
+from pipecat.processors.tone.tagger._input import Layout, Message, TurnContext, encode
+from pipecat.processors.tone.tagger._labels import LabelSpace, SentenceLabels, Span
 from pipecat.processors.tone.tagger.model import PipecatToneTaggerModel
 from pipecat.tests.utils import SleepFrame, run_test
 
@@ -267,6 +268,34 @@ async def test_breaths_past_the_models_limit_for_a_reply_are_dropped(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_a_breath_after_a_sentence_counts_toward_the_limit(monkeypatch):
+    model = FakeTaggerModel(
+        {
+            "One.": SentenceLabels(sound_after="breath"),
+            "Two.": SentenceLabels(sound_before="breath"),
+        },
+        breaths_per_reply=1,
+    )
+    policy = ExpressionPolicy(guidance=[ExpressionGuidance.BREATHE])
+
+    tagged = await _tagged(
+        monkeypatch, model, ELEVENLABS, *_reply("One. Two."), params=_expressive(policy)
+    )
+
+    assert tagged == ["One. [[short breath]]", "Two."]
+
+
+def test_a_layout_that_reads_no_turns_reads_none_of_the_call():
+    turn = TurnContext(
+        [Message("user", "My order is late.")], LabelSpace({}, {}, False), ExpressionPolicy(), None
+    )
+
+    call, _, _ = encode(turn, [], "Sorry.", Layout(context_turns=0))
+
+    assert call == ""
+
+
+@pytest.mark.asyncio
 async def test_text_the_user_typed_is_part_of_the_call(monkeypatch):
     model = FakeTaggerModel()
 
@@ -309,6 +338,31 @@ async def test_a_confirmed_turn_replaces_its_speculation_where_it_stands(monkeyp
     assert [(m.role, m.text) for m in later.messages] == [
         ("user", "My order is late."),
         ("assistant", "Sorry."),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_a_withdrawn_speculation_leaves_the_call(monkeypatch):
+    model = FakeTaggerModel()
+
+    await _tagged(
+        monkeypatch,
+        model,
+        ELEVENLABS,
+        LLMContextAssistantTurnFrame(text="How can I help?", timestamp="t0"),
+        LLMContextUserTurnFrame(text="My order", timestamp="t1", speculation=True),
+        SleepFrame(sleep=0.05),
+        UserTurnResponseCancelFrame(),
+        LLMContextAssistantTurnFrame(text="Take your time.", timestamp="t2"),
+        LLMContextUserTurnFrame(text="My order is late.", timestamp="t3"),
+        *_reply("Sorry."),
+    )
+
+    turn = model.calls[0][0]
+    assert [(m.role, m.text) for m in turn.messages] == [
+        ("assistant", "How can I help?"),
+        ("assistant", "Take your time."),
+        ("user", "My order is late."),
     ]
 
 

@@ -165,7 +165,7 @@ def encode(
         The two texts, and where the sentence starts in the second.
     """
     lines = []
-    for m in turn.messages[-layout.context_turns :]:
+    for m in turn.messages[-layout.context_turns :] if layout.context_turns else []:
         lines.append(
             f"caller ({_describe(m.heard)}): {m.text}" if m.role == "user" else f"agent: {m.text}"
         )
