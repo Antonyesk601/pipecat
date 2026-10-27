@@ -405,52 +405,9 @@ def _select_alignment(
     return msg.get(alignment_key) or msg.get(normalized_key)
 
 
-# A space inside an audio tag while the alignment is split into words, so the
-# tag stays one word; :func:`_audio_tag_words` puts the space back.
-_TAG_SPACE = "\u00a0"
-
-
-def _join_audio_tags(
-    alignment: Mapping[str, Any], chars_key: str, in_tag: bool
-) -> tuple[dict[str, Any], bool]:
-    """Join each bracketed audio tag, such as ``[short pause]``, into one word of the alignment.
-
-    Eleven v3 and v4 return the tags they perform as characters in the
-    alignment. With the spaces inside it held as ``_TAG_SPACE``, a tag reaches
-    the word timestamps as a word of its own, which completes the sound or
-    pause it performs. A tag can span alignment chunks, so whether one is still
-    open is carried from chunk to chunk.
-
-    Args:
-        alignment: Alignment dict from the API.
-        chars_key: The key of its characters.
-        in_tag: Whether a tag was still open at the end of the previous chunk.
-
-    Returns:
-        The alignment with the spaces inside tags held, and whether a tag is
-        still open at its end.
-    """
-    joined_chars = []
-    for char in alignment.get(chars_key) or []:
-        if char == "[":
-            in_tag = True
-        elif char == "]":
-            in_tag = False
-        elif char == " " and in_tag:
-            char = _TAG_SPACE
-        joined_chars.append(char)
-    joined = dict(alignment)
-    joined[chars_key] = joined_chars
-    return joined, in_tag
-
-
-def _audio_tag_words(word_times: list[tuple[str, float]]) -> list[tuple[str, float]]:
-    """Put back the spaces :func:`_join_audio_tags` held inside audio tags.
-
-    A tag is reported as it was sent, ``[inhales deeply]``, so it matches the
-    text the service was given.
-    """
-    return [(word.replace(_TAG_SPACE, " "), time) for word, time in word_times]
+def _ends_in_audio_tag(word: str) -> bool:
+    """Whether a word ends inside a bracketed audio tag, as one cut off between chunks does."""
+    return word.rfind("[") > word.rfind("]")
 
 
 def _strip_utterance_leading_spaces(
@@ -493,6 +450,8 @@ def calculate_word_times(
     cumulative_time: float,
     partial_word: str = "",
     partial_word_start_time: float = 0.0,
+    *,
+    audio_tags: bool = False,
 ) -> tuple[list[tuple[str, float]], str, float]:
     """Calculate word timestamps from character alignment information.
 
@@ -501,6 +460,10 @@ def calculate_word_times(
         cumulative_time: Base time offset for this chunk.
         partial_word: Partial word carried over from previous chunk.
         partial_word_start_time: Start time of the partial word.
+        audio_tags: Whether a bracketed audio tag, such as ``[short pause]``,
+            is one word, spaces and all. Eleven v3 and v4 return the tags they
+            perform in the alignment, and a tag reported whole matches the text
+            it was sent in.
 
     Returns:
         Tuple of (word_times, new_partial_word, new_partial_word_start_time):
@@ -522,9 +485,12 @@ def calculate_word_times(
     word_start_times = []
     current_word = partial_word  # Start with any partial word from previous chunk
     word_start_time = partial_word_start_time if partial_word else None
+    in_tag = audio_tags and _ends_in_audio_tag(current_word)
 
     for i, char in enumerate(chars):
-        if char == " ":
+        if audio_tags and char in "[]":
+            in_tag = char == "["
+        if char == " " and not in_tag:
             # End of current word
             if current_word:  # Only add non-empty words
                 words.append(current_word)

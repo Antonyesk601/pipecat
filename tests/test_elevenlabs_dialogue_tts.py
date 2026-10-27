@@ -31,10 +31,6 @@ from pipecat.services.elevenlabs.dialogue.tts import (
     _normalize_ttd_alignment,
 )
 from pipecat.services.elevenlabs.tts import calculate_word_times
-from pipecat.services.elevenlabs.tts_base import (
-    _audio_tag_words,
-    _join_audio_tags,
-)
 from pipecat.services.tts_service import TextAggregationMode
 from pipecat.tests.utils import run_test
 from tests.test_tts_frame_ordering import _MockWordTimestampHttpTTSService
@@ -508,22 +504,24 @@ def _alignment(text: str, start_ms: int = 0) -> dict:
     }
 
 
-def test_audio_tags_are_joined_into_words_of_their_own():
-    joined, in_tag = _join_audio_tags(_alignment("four, [short pause] two"), "chars", False)
+def test_an_audio_tag_is_one_word():
+    word_times, partial, _ = calculate_word_times(
+        _alignment("10\u00a0000, [short pause] two"), 0.0, audio_tags=True
+    )
 
-    assert not in_tag
-    word_times, partial, _ = calculate_word_times(joined, 0.0)
-    assert [word for word, _ in _audio_tag_words(word_times)] == ["four,", "[short pause]"]
+    assert [word for word, _ in word_times] == ["10\u00a0000,", "[short pause]"]
     assert partial == "two"
 
 
-def test_audio_tag_split_across_chunks_is_joined():
-    first, in_tag = _join_audio_tags(_alignment("[clear th"), "chars", False)
-    second, in_tag = _join_audio_tags(_alignment("roat] It's"), "chars", in_tag)
+def test_an_audio_tag_split_across_chunks_is_one_word():
+    first, partial, start = calculate_word_times(_alignment("[clear th"), 0.0, audio_tags=True)
+    second, partial, _ = calculate_word_times(
+        _alignment("roat] It's"), 0.0, partial, start, audio_tags=True
+    )
 
-    assert "".join(first["chars"]) == "[clear\u00a0th"
-    assert "".join(second["chars"]) == "roat] It's"
-    assert not in_tag
+    assert first == []
+    assert [word for word, _ in second] == ["[clear throat]"]
+    assert partial == "It's"
 
 
 @pytest.mark.asyncio
@@ -600,14 +598,13 @@ class TestAudioTagExpressionAdapter:
 
 
 class _AlignedTTSService(_MockWordTimestampHttpTTSService):
-    """Reports the words of what it's sent as ElevenLabs aligns them, audio tags joined."""
+    """Reports the words of what it's sent as ElevenLabs aligns them, audio tags whole."""
 
     expression_adapter_class = ElevenLabsAudioTagExpressionAdapter
 
     async def run_tts(self, text: str, context_id: str):
-        joined, _ = _join_audio_tags(_alignment(text), "chars", False)
-        word_times, partial, start = calculate_word_times(joined, 0.0)
-        self._word_times = _audio_tag_words(word_times + ([(partial, start)] if partial else []))
+        word_times, partial, start = calculate_word_times(_alignment(text), 0.0, audio_tags=True)
+        self._word_times = word_times + ([(partial, start)] if partial else [])
         async for frame in super().run_tts(text, context_id):
             yield frame
 
