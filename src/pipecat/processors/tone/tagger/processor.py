@@ -27,6 +27,7 @@ from pipecat.frames.frames import (
 from pipecat.processors.aggregators.llm_text_processor import LLMTextProcessor
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessorSetup
 from pipecat.processors.frameworks.rtvi.frames import RTVISendTextFrame
+from pipecat.processors.tone._models import load_model
 from pipecat.processors.tone.tagger._input import Message, TurnContext, fold
 from pipecat.processors.tone.tagger._labels import LabelSpace, ReplyRenderer, SentenceLabels
 from pipecat.processors.tone.tagger.model import PipecatToneTaggerModel
@@ -36,15 +37,19 @@ from pipecat.utils.text.skip_tags_aggregator import SkipTagsAggregator
 class PipecatToneTagger(LLMTextProcessor):
     """Tags an LLM's plain replies with Pipecat Tone, a sentence at a time.
 
-    Goes between the LLM and the TTS service. At start it broadcasts an
+    Goes between the LLM and the TTS service. Each sentence is labeled with
+    the call so far, how the user sounded and the pipeline's expression
+    policy, and sent on with the tags the TTS service performs. The labeling
+    runs off the event loop, and the sentence waits for it, about 15
+    milliseconds.
+
+    The model loads in the background at start, once a process, and every
+    tagger shares it. Once it has loaded, the tagger broadcasts an
     :class:`~pipecat.frames.frames.ExpressionTaggerMetadataFrame`, so the LLM
     is taught no tags and writes plain words, and the context keeps them
-    plain. Each sentence is labeled with the call so far, how the user
-    sounded and the pipeline's expression policy, and sent on with the tags
-    the TTS service performs. The labeling runs off the event loop, and the
-    sentence waits for it, about 15 milliseconds. A model that can't be
-    loaded is reported as an error that leaves the tagger unusable, and
-    replies pass through untagged.
+    plain. Until then, and if the model can't be loaded, the LLM writes the
+    tags itself and replies pass through as written. A model that can't be
+    loaded is reported as an error that leaves the tagger unusable.
 
     The policy's ``ExpressionGuidance`` presets steer the tagger, its
     ``delivery`` and ``sounds`` narrow the names it writes, and a breath is
@@ -133,18 +138,18 @@ class PipecatToneTagger(LLMTextProcessor):
                 "turn it on with PipelineParams(enable_expressive_conversation=True)"
             )
             return
-        await self.broadcast_frame(ExpressionTaggerMetadataFrame, service_name=self.name)
-        if self._model is None:
-            try:
-                self._model = await asyncio.to_thread(
-                    PipecatToneTaggerModel.download, threads=self._threads
-                )
-            except Exception as e:
-                await self.push_error(
-                    f"Pipecat Tone's tagger couldn't load its model: {e}",
-                    e,
-                    force_treat_as_permanent=True,
-                )
+        self.create_task(self._load(), "load")
+
+    async def _load(self):
+        """Load the model, then announce that the tagger writes the tags."""
+        self._model = await load_model(
+            self,
+            "Pipecat Tone's tagger",
+            ("tagger", self._threads),
+            lambda: PipecatToneTaggerModel.download(threads=self._threads),
+        )
+        if self._model:
+            await self.broadcast_frame(ExpressionTaggerMetadataFrame, service_name=self.name)
 
     def _on_tts_metadata(self, frame: TTSMetadataFrame):
         if not self._expressive:

@@ -2197,7 +2197,7 @@ class PerceptionMetadataFrame(ServiceMetadataFrame):
 
 @dataclass
 class ExpressionTaggerMetadataFrame(ServiceMetadataFrame):
-    """Metadata broadcast at start by a processor that tags the LLM's replies.
+    """Metadata broadcast by a processor that tags the LLM's replies, once it can.
 
     A tagger sits between the LLM and the TTS service and writes the
     expression tags itself. Upstream, the LLM is then taught no tags, so it

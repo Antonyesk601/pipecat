@@ -16,9 +16,10 @@ from pipecat.frames.frames import (
     PerceptionMetadataFrame,
     TranscriptionFrame,
 )
+from pipecat.processors.tone import _models
 from pipecat.processors.tone.reader import PipecatToneReader
 from pipecat.processors.tone.reader.model import PipecatToneReaderModel
-from pipecat.tests.utils import run_test
+from pipecat.tests.utils import SleepFrame, run_test
 
 TAGS = {
     "emotion": {
@@ -47,6 +48,17 @@ class FakeReaderModel:
         return TAGS
 
 
+@pytest.fixture(autouse=True)
+def _unshared_models(monkeypatch):
+    """Each test loads its own model."""
+    monkeypatch.setattr(_models, "_models", {})
+
+
+def _loaded() -> SleepFrame:
+    """Time for the model to load in the background at start."""
+    return SleepFrame(sleep=0.05)
+
+
 def _reader(monkeypatch, model: FakeReaderModel) -> PipecatToneReader:
     """A reader whose model downloads as ``model``."""
     monkeypatch.setattr(PipecatToneReaderModel, "download", lambda **kwargs: model)
@@ -59,7 +71,7 @@ def _transcription(text: str) -> TranscriptionFrame:
 
 @pytest.mark.asyncio
 async def test_the_signals_are_declared_at_start(monkeypatch):
-    down, _ = await run_test(_reader(monkeypatch, FakeReaderModel()), frames_to_send=[])
+    down, _ = await run_test(_reader(monkeypatch, FakeReaderModel()), frames_to_send=[_loaded()])
 
     metadata = [f for f in down if isinstance(f, PerceptionMetadataFrame)]
     assert [(t.name, t.labels) for t in metadata[0].perception.signals] == [
@@ -72,7 +84,7 @@ async def test_the_signals_are_declared_at_start(monkeypatch):
 async def test_the_reading_is_set_on_its_transcription(monkeypatch):
     down, _ = await run_test(
         _reader(monkeypatch, FakeReaderModel()),
-        frames_to_send=[_transcription("Oh great, a forty minute wait.")],
+        frames_to_send=[_loaded(), _transcription("Oh great, a forty minute wait.")],
         expected_down_frames=[PerceptionMetadataFrame, TranscriptionFrame],
     )
 
@@ -89,6 +101,7 @@ async def test_a_turn_is_read_against_the_bots_words_before_it(monkeypatch):
     await run_test(
         _reader(monkeypatch, model),
         frames_to_send=[
+            _loaded(),
             LLMContextAssistantTurnFrame(
                 text="The next visit is in forty minutes. Sorry.", timestamp="now"
             ),
@@ -115,7 +128,7 @@ async def test_interim_transcriptions_are_not_read(monkeypatch):
 async def test_a_failed_read_is_reported_and_the_transcription_still_passes(monkeypatch):
     down, up = await run_test(
         _reader(monkeypatch, FakeReaderModel(error=RuntimeError("no session"))),
-        frames_to_send=[_transcription("Hello.")],
+        frames_to_send=[_loaded(), _transcription("Hello.")],
         expected_down_frames=[PerceptionMetadataFrame, TranscriptionFrame],
     )
 
@@ -133,7 +146,7 @@ async def test_a_model_that_cant_load_leaves_the_reader_unusable_and_the_pipelin
     monkeypatch.setattr(PipecatToneReaderModel, "download", fail)
     reader = PipecatToneReader()
 
-    down, up = await run_test(reader, frames_to_send=[_transcription("Hello there.")])
+    down, up = await run_test(reader, frames_to_send=[_loaded(), _transcription("Hello there.")])
 
     assert not reader.is_usable
     assert [f for f in up if isinstance(f, ErrorFrame)]

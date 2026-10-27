@@ -6,6 +6,8 @@
 
 """Tests for the processor that tags an LLM's replies with Pipecat Tone."""
 
+import time
+
 import pytest
 
 from pipecat.adapters.tts.services.cartesia_adapter import CartesiaExpressionAdapter
@@ -27,6 +29,7 @@ from pipecat.frames.frames import (
 from pipecat.pipeline.worker import PipelineParams
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.processors.frameworks.rtvi.frames import RTVISendTextFrame
+from pipecat.processors.tone import _models
 from pipecat.processors.tone.tagger import PipecatToneTagger
 from pipecat.processors.tone.tagger._input import TurnContext
 from pipecat.processors.tone.tagger._labels import SentenceLabels, Span
@@ -64,6 +67,17 @@ class FakeTaggerModel:
         return self.labels.get(sentence, SentenceLabels())
 
 
+@pytest.fixture(autouse=True)
+def _unshared_models(monkeypatch):
+    """Each test loads its own model."""
+    monkeypatch.setattr(_models, "_models", {})
+
+
+def _loaded() -> SleepFrame:
+    """Time for the model to load in the background at start."""
+    return SleepFrame(sleep=0.05)
+
+
 def _tagger(monkeypatch, model: FakeTaggerModel) -> PipecatToneTagger:
     """A tagger whose model downloads as ``model``."""
     monkeypatch.setattr(PipecatToneTaggerModel, "download", lambda **kwargs: model)
@@ -86,7 +100,7 @@ async def _tagged(
     monkeypatch, model: FakeTaggerModel, *frames: Frame, params=EXPRESSIVE
 ) -> list[str]:
     down, _ = await run_test(
-        _tagger(monkeypatch, model), frames_to_send=list(frames), pipeline_params=params
+        _tagger(monkeypatch, model), frames_to_send=[_loaded(), *frames], pipeline_params=params
     )
     return [f.text for f in down if isinstance(f, AggregatedTextFrame)]
 
@@ -94,7 +108,9 @@ async def _tagged(
 @pytest.mark.asyncio
 async def test_the_tagger_announces_itself_both_ways_at_start(monkeypatch):
     down, up = await run_test(
-        _tagger(monkeypatch, FakeTaggerModel()), frames_to_send=[], pipeline_params=EXPRESSIVE
+        _tagger(monkeypatch, FakeTaggerModel()),
+        frames_to_send=[_loaded()],
+        pipeline_params=EXPRESSIVE,
     )
 
     assert [f for f in down if isinstance(f, ExpressionTaggerMetadataFrame)]
@@ -173,7 +189,7 @@ async def test_a_sentence_that_cant_be_tagged_is_spoken_untagged_with_an_error(m
 
     down, up = await run_test(
         _tagger(monkeypatch, model),
-        frames_to_send=[ELEVENLABS, *_reply("Hello there.")],
+        frames_to_send=[_loaded(), ELEVENLABS, *_reply("Hello there.")],
         pipeline_params=EXPRESSIVE,
     )
 
@@ -354,9 +370,50 @@ async def test_a_model_that_cant_load_leaves_the_tagger_unusable(monkeypatch):
     tagger = PipecatToneTagger()
 
     down, up = await run_test(
-        tagger, frames_to_send=[ELEVENLABS, *_reply("Hello there.")], pipeline_params=EXPRESSIVE
+        tagger,
+        frames_to_send=[_loaded(), ELEVENLABS, *_reply("<<calm>> Hello there.")],
+        pipeline_params=EXPRESSIVE,
     )
 
     assert not tagger.is_usable
     assert [f for f in up if isinstance(f, ErrorFrame)]
-    assert [f.text for f in down if isinstance(f, AggregatedTextFrame)] == ["Hello there."]
+    # The LLM is still taught the tags, and its reply is spoken as it wrote it.
+    assert not [f for f in down + up if isinstance(f, ExpressionTaggerMetadataFrame)]
+    assert [f.text for f in down if isinstance(f, AggregatedTextFrame)] == ["<<calm>> Hello there."]
+
+
+@pytest.mark.asyncio
+async def test_replies_pass_as_written_until_the_model_has_loaded(monkeypatch):
+    def slow(**kwargs):
+        time.sleep(0.2)
+        return FakeTaggerModel()
+
+    monkeypatch.setattr(PipecatToneTaggerModel, "download", slow)
+
+    down, _ = await run_test(
+        PipecatToneTagger(),
+        frames_to_send=[ELEVENLABS, *_reply("<<calm>> Hello there."), SleepFrame(sleep=0.5)],
+        pipeline_params=EXPRESSIVE,
+    )
+
+    reply = next(i for i, f in enumerate(down) if isinstance(f, AggregatedTextFrame))
+    announced = next(i for i, f in enumerate(down) if isinstance(f, ExpressionTaggerMetadataFrame))
+    assert down[reply].text == "<<calm>> Hello there."
+    assert announced > reply
+
+
+@pytest.mark.asyncio
+async def test_every_tagger_shares_one_model(monkeypatch):
+    model = FakeTaggerModel()
+    loads = []
+
+    def download(**kwargs):
+        loads.append(kwargs)
+        return model
+
+    monkeypatch.setattr(PipecatToneTaggerModel, "download", download)
+
+    for _ in range(2):
+        await run_test(PipecatToneTagger(), frames_to_send=[_loaded()], pipeline_params=EXPRESSIVE)
+
+    assert len(loads) == 1
